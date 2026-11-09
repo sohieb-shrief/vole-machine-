@@ -1,7 +1,7 @@
 #ifndef INSTRUCTION_DECODER_H
 #define INSTRUCTION_DECODER_H
 
-#include <memory>
+#include <Memory>
 #include "RawInstruction.h"
 
 class Instruction;

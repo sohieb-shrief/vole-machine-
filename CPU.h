@@ -2,7 +2,7 @@
 #define CPU_H
 
 #include <string>
-#include <memory>
+#include <Memory>
 
 #include "CpuStatus.h"
 #include "RawInstruction.h"
