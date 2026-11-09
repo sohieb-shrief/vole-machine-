@@ -1,14 +1,18 @@
-#ifndef INSTRUCTION_H
-#define INSTRUCTION_H
+#ifndef EXECUTION_CONTEXT_H
+#define EXECUTION_CONTEXT_H
 
-#include "ExecutionContext.h"
-#include <string>
+#include "RegisterFile.h"
+#include "Memory.h"
 
-class Instruction {
+class ExecutionContext {
 public:
-    virtual ~Instruction() = default;
-    virtual void execute(ExecutionContext& context) = 0;
-    virtual std::string describe() const = 0;
+    virtual ~ExecutionContext() = default;
+
+    virtual RegisterFile& getRegisters() = 0;
+    virtual Memory& getMemory() = 0;
+
+    virtual void jump(int address) = 0;
+    virtual void halt() = 0;
 };
 
 #endif

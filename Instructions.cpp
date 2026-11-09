@@ -1,105 +1,35 @@
-#include "Instructions.h"
-
-#include <sstream>
 #include <cmath>
+#include <cstdlib>
+#include "Instructions.h"
+#include "VoleException.h"
+
 #include <cstdint>
+#include <sstream>
+#include <string>
 
-// 1 - Load from memory
-LoadFromMemoryInstruction::LoadFromMemoryInstruction(
-    const RawInstruction& raw, int r, int address)
-    : Instruction(raw), r(r), address(address) {}
+// Convert 8-bit floating point value to double
+static double decodeFloat(uint8_t value) {
+    int sign = (value & 0x80) ? -1 : 1;
+    int exponent = (value >> 4) & 0x07;
+    int mantissa = value & 0x0F;
 
-void LoadFromMemoryInstruction::execute(ExecutionContext& context) {
-    context.getRegisters().set(r, context.getMemory().read(address));
+    if (mantissa == 0)
+        return 0.0;
+
+    return sign * (mantissa / 16.0) *
+           std::pow(2.0, exponent - 4);
 }
 
-std::string LoadFromMemoryInstruction::describe() const {
-    return "Load from memory";
-}
-
-// 2 - Load immediate
-LoadImmediateInstruction::LoadImmediateInstruction(
-    const RawInstruction& raw, int r, int value)
-    : Instruction(raw), r(r), value(value) {}
-
-void LoadImmediateInstruction::execute(ExecutionContext& context) {
-    context.getRegisters().set(r, static_cast<std::uint8_t>(value));
-}
-
-std::string LoadImmediateInstruction::describe() const {
-    return "Load immediate";
-}
-
-// 3 - Store
-StoreInstruction::StoreInstruction(
-    const RawInstruction& raw, int r, int address)
-    : Instruction(raw), r(r), address(address) {}
-
-void StoreInstruction::execute(ExecutionContext& context) {
-    std::uint8_t value = context.getRegisters().get(r);
-    context.getMemory().write(address, value);
-}
-
-std::string StoreInstruction::describe() const {
-    return "Store";
-}
-
-// 4 - Move
-MoveInstruction::MoveInstruction(
-    const RawInstruction& raw, int source, int destination)
-    : Instruction(raw), source(source), destination(destination) {}
-
-void MoveInstruction::execute(ExecutionContext& context) {
-    std::uint8_t value = context.getRegisters().get(source);
-    context.getRegisters().set(destination, value);
-}
-
-std::string MoveInstruction::describe() const {
-    return "Move";
-}
-
-// 5 - Integer addition
-AddIntegerInstruction::AddIntegerInstruction(
-    const RawInstruction& raw, int r, int s, int t)
-    : Instruction(raw), r(r), s(s), t(t) {}
-
-void AddIntegerInstruction::execute(ExecutionContext& context) {
-    int a = context.getRegisters().get(s);
-    int b = context.getRegisters().get(t);
-
-    // 8-bit addition; overflow wraps around.
-    std::uint8_t result = static_cast<std::uint8_t>(a + b);
-
-    context.getRegisters().set(r, result);
-}
-
-std::string AddIntegerInstruction::describe() const {
-    return "Integer addition";
-}
-
-// 6 - Floating-point addition
-namespace {
-
-double decodeFloat(std::uint8_t bits) {
-    int sign = (bits & 0x80) ? -1 : 1;
-    int exponent = (bits >> 4) & 0x07;
-    int mantissa = bits & 0x0F;
-
-    return sign * (static_cast<double>(mantissa) / 16.0)
-           * std::pow(2.0, exponent - 4);
-}
-
-std::uint8_t encodeFloat(double value) {
-    if (value == 0.0) {
+// Convert double to 8-bit floating point value
+static uint8_t encodeFloat(double value) {
+    if (value == 0.0)
         return 0;
-    }
 
     int sign = value < 0 ? 1 : 0;
-    value = std::fabs(value);
+    value = std::abs(value);
 
     int exponent = 0;
 
-    // Normalize the mantissa to the range [0.5, 1).
     while (value >= 1.0 && exponent < 3) {
         value /= 2.0;
         exponent++;
@@ -110,49 +40,135 @@ std::uint8_t encodeFloat(double value) {
         exponent--;
     }
 
-    int encodedExponent = exponent + 4;
+    int mantissa = static_cast<int>(
+        std::round(value * 16.0)
+    );
 
-    int mantissa = static_cast<int>(std::round(value * 16.0));
-
-    if (mantissa > 15) {
+    if (mantissa > 15)
         mantissa = 15;
-    }
 
-    if (mantissa < 0) {
+    if (mantissa < 0)
         mantissa = 0;
-    }
 
-    return static_cast<std::uint8_t>(
-        (sign << 7) | (encodedExponent << 4) | mantissa
+    int exponentBits = exponent + 4;
+
+    return static_cast<uint8_t>(
+        (sign << 7) | (exponentBits << 4) | mantissa
     );
 }
 
+// 1: Load from memory
+LoadFromMemoryInstruction::LoadFromMemoryInstruction(
+    const RawInstruction& raw, int r, int address)
+    : Instruction(raw), r(r), address(address) {}
+
+void LoadFromMemoryInstruction::execute(ExecutionContext& context) {
+    context.getRegisters().set(
+        r, context.getMemory().read(address)
+    );
 }
 
+std::string LoadFromMemoryInstruction::describe() const {
+    return "Load from memory";
+}
+
+// 2: Load immediate
+LoadImmediateInstruction::LoadImmediateInstruction(
+    const RawInstruction& raw, int r, int value)
+    : Instruction(raw), r(r), value(value) {}
+
+void LoadImmediateInstruction::execute(ExecutionContext& context) {
+    context.getRegisters().set(r, static_cast<uint8_t>(value));
+}
+
+std::string LoadImmediateInstruction::describe() const {
+    return "Load immediate";
+}
+
+// 3: Store
+StoreInstruction::StoreInstruction(
+    const RawInstruction& raw, int r, int address)
+    : Instruction(raw), r(r), address(address) {}
+
+void StoreInstruction::execute(ExecutionContext& context) {
+    context.getMemory().write(
+        address, context.getRegisters().get(r)
+    );
+}
+
+std::string StoreInstruction::describe() const {
+    return "Store";
+}
+
+// 4: Move
+MoveInstruction::MoveInstruction(
+    const RawInstruction& raw, int source, int destination)
+    : Instruction(raw), source(source), destination(destination) {}
+
+void MoveInstruction::execute(ExecutionContext& context) {
+    uint8_t value = context.getRegisters().get(source);
+    context.getRegisters().set(destination, value);
+}
+
+std::string MoveInstruction::describe() const {
+    return "Move";
+}
+
+// 5: Integer addition
+AddIntegerInstruction::AddIntegerInstruction(
+    const RawInstruction& raw, int r, int s, int t)
+    : Instruction(raw), r(r), s(s), t(t) {}
+
+void AddIntegerInstruction::execute(ExecutionContext& context) {
+    int a = static_cast<int8_t>(
+        context.getRegisters().get(s)
+    );
+
+    int b = static_cast<int8_t>(
+        context.getRegisters().get(t)
+    );
+
+    int result = a + b;
+
+    context.getRegisters().set(
+        r, static_cast<uint8_t>(result)
+    );
+}
+
+std::string AddIntegerInstruction::describe() const {
+    return "Integer addition";
+}
+
+// 6: Floating point addition
 AddFloatInstruction::AddFloatInstruction(
     const RawInstruction& raw, int r, int s, int t)
     : Instruction(raw), r(r), s(s), t(t) {}
 
 void AddFloatInstruction::execute(ExecutionContext& context) {
-    std::uint8_t a = context.getRegisters().get(s);
-    std::uint8_t b = context.getRegisters().get(t);
+    double a = decodeFloat(
+        context.getRegisters().get(s)
+    );
 
-    double result = decodeFloat(a) + decodeFloat(b);
+    double b = decodeFloat(
+        context.getRegisters().get(t)
+    );
 
-    context.getRegisters().set(r, encodeFloat(result));
+    uint8_t result = encodeFloat(a + b);
+
+    context.getRegisters().set(r, result);
 }
 
 std::string AddFloatInstruction::describe() const {
-    return "Floating-point addition";
+    return "Floating point addition";
 }
 
-// 7 - OR
+// 7: OR
 OrInstruction::OrInstruction(
     const RawInstruction& raw, int r, int s, int t)
     : Instruction(raw), r(r), s(s), t(t) {}
 
 void OrInstruction::execute(ExecutionContext& context) {
-    std::uint8_t result =
+    uint8_t result =
         context.getRegisters().get(s) |
         context.getRegisters().get(t);
 
@@ -163,13 +179,13 @@ std::string OrInstruction::describe() const {
     return "OR";
 }
 
-// 8 - AND
+// 8: AND
 AndInstruction::AndInstruction(
     const RawInstruction& raw, int r, int s, int t)
     : Instruction(raw), r(r), s(s), t(t) {}
 
 void AndInstruction::execute(ExecutionContext& context) {
-    std::uint8_t result =
+    uint8_t result =
         context.getRegisters().get(s) &
         context.getRegisters().get(t);
 
@@ -180,13 +196,13 @@ std::string AndInstruction::describe() const {
     return "AND";
 }
 
-// 9 - XOR
+// 9: XOR
 XorInstruction::XorInstruction(
     const RawInstruction& raw, int r, int s, int t)
     : Instruction(raw), r(r), s(s), t(t) {}
 
 void XorInstruction::execute(ExecutionContext& context) {
-    std::uint8_t result =
+    uint8_t result =
         context.getRegisters().get(s) ^
         context.getRegisters().get(t);
 
@@ -197,23 +213,24 @@ std::string XorInstruction::describe() const {
     return "XOR";
 }
 
-// A - Rotate right
+// A: Rotate right
 RotateInstruction::RotateInstruction(
     const RawInstruction& raw, int r, int count)
     : Instruction(raw), r(r), count(count) {}
 
 void RotateInstruction::execute(ExecutionContext& context) {
-    std::uint8_t value = context.getRegisters().get(r);
+    uint8_t value = context.getRegisters().get(r);
 
     count %= 8;
 
-    for (int i = 0; i < count; i++) {
-        std::uint8_t lowestBit = value & 1;
-        value = static_cast<std::uint8_t>(value >> 1);
+    if (count < 0)
+        count += 8;
 
-        if (lowestBit) {
-            value |= 0x80;
-        }
+    if (count != 0) {
+        value = static_cast<uint8_t>(
+            (value >> count) |
+            (value << (8 - count))
+        );
     }
 
     context.getRegisters().set(r, value);
@@ -223,7 +240,7 @@ std::string RotateInstruction::describe() const {
     return "Rotate right";
 }
 
-// B - Conditional jump
+// B: Jump
 JumpInstruction::JumpInstruction(
     const RawInstruction& raw, int r, int address)
     : Instruction(raw), r(r), address(address) {}
@@ -239,7 +256,7 @@ std::string JumpInstruction::describe() const {
     return "Conditional jump";
 }
 
-// C - Halt
+// C: Halt
 HaltInstruction::HaltInstruction(const RawInstruction& raw)
     : Instruction(raw) {}
 

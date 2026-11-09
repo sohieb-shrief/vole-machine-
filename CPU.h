@@ -1,13 +1,12 @@
 #ifndef CPU_H
 #define CPU_H
 
-#include <string>
-#include <Memory>
-
+#include "ExecutionContext.h"
+#include "RegisterFile.h"
+#include "Memory.h"
+#include "InstructionDecoder.h"
 #include "CpuStatus.h"
 #include "RawInstruction.h"
-#include "ExecutionContext.h"
-#include "InstructionDecoder.h"
 
 class CPU : public ExecutionContext {
 private:
